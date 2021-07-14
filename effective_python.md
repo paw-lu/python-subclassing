@@ -17,10 +17,6 @@ jupyter:
 
 Inspired by chapter 5 of [Effective Python](https://effectivepython.com/).
 
-```python
-
-```
-
 <!-- #region tags=[] -->
 ## Compose classes instead of nesting many levels of built-in types
 <!-- #endregion -->
@@ -303,3 +299,171 @@ counter.added
     <li>The <code>__call__</code> special method enablesr instances of a class to be called like a function</li>
     <li>When you need a function to maintain state, defined a class that provides the <code>__call__</code> method instead of stateful closure</li>
 </div>
+
+
+## Use `@classmethod` polymorphism to construct objects generically
+
+
+Many classes can fullfil the same interface or abstract base class.
+
+If implementing MapReduce:
+
+```python
+import os
+import threading
+from os import PathLike
+from typing import Generator
+from typing import List
+
+
+class InputData:
+    def read(self):
+        raise NotImplementedError
+
+
+class PathInputData(InputData):
+    def __init__(self, path: PathLike) -> None:
+        super().__init__()
+        self.path = path
+
+    def read(self) -> str:
+        with open(self.path) as f:
+            return f.read()
+
+
+class Worker:
+    def __init__(self, input_data: PathLike) -> None:
+        self.input_data = input_data
+
+    def map(self):
+        raise NotImplementedError
+
+    def reduce(self, other):
+        raise NotImplementedError
+
+
+class LineCountWorker(Worker):
+    def map(self) -> None:
+        data = self.input_data.read()
+        self.result = data.count("\n")
+
+    def reduce(self, other: int) -> None:
+        self.result += other.result
+
+
+def generate_inputs(data_dir: PathLike) -> Generator[PathInputData, None, None]:
+    for name in os.listdir(data_dir):
+        yield PathInputData(os.path.join(data_dir, name))
+
+
+def create_workers(input_list: List[PathLike]) -> List[LineCountWorker]:
+    workers = []
+    for input_data in input_list:
+        workers.append(LineCountWorker(input_data))
+    return workers
+
+
+def execute(workers: List[LineCountWorker]) -> int:
+    threads = [threading.Thread(target=worker.map) for worker in workers]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+    first, *rest = workers
+    for worker in rest:
+        first.reduce(worker)
+    return first.result
+
+
+def mapreduce(data_dir: PathLike) -> str:
+    inputs = generate_inputs(data_dir)
+    workers = create_workers(inputs)
+    return execute(workers)
+```
+
+`mapreduce` here is not genetic.
+If you want to write another `InputData` or `Worker` subclass,
+also need to rewrite `generate_inputs`, `create_workers` and `mapreduce` to match.
+
+Can use polymorphism on whole class.
+
+```python
+from typing import Dict
+
+
+class GenericInputData:
+    def read(self):
+        raise NotImplementedError
+
+    @classmethod
+    def generate_inputs(cls, config: Dict[str, PathLike]):
+        raise NotImplementedError
+
+
+class PathInputData(InputData):
+    def __init__(self, path: PathLike) -> None:
+        super().__init__()
+        self.path = path
+
+    def read(self) -> str:
+        with open(self.path) as f:
+            return f.read()
+
+    @classmethod
+    def generate_inputs(
+        cls, config: Dict[str, PathLike]
+    ) -> Generator[PathInputData, None, None]:
+        data_dir = config["data_dir"]
+        for name in os.listdir(data_dir):
+            yield cls(os.path.join(data_dir, name))
+
+
+class GenericWorker:
+    def __init__(self, input_data):
+        self.input_data = input_data
+        self.result = None
+
+    def map(self):
+        raise NotImplementedError
+
+    def reduce(self, other):
+        raise NotImplementedError
+
+    @classmethod
+    def create_workers(
+        cls, input_class, config: Dict[str, PathLike]
+    ) -> List["GenericWorker"]:
+        workers = []
+        for input_data in input_class.generate_inputs(config):
+            workers.append(cls(input_data))
+        return workers
+
+
+class LineCountWorker(GenericWorker):
+    def map(self) -> None:
+        data = self.input_data.read()
+        self.result = data.count("\n")
+
+    def reduce(self, other: int) -> None:
+        self.result += other.result
+
+
+def mapreduce(
+    worker_class: GenericWorker,
+    input_class: GenericInputData,
+    config: Dict[str, PathLike],
+) -> int:
+    workers = worker_class.create_workers(input_class, config)
+    return execute(workers)
+```
+
+<div class="alert alert-block alert-info">
+  <b>Tip:</b>
+    <li>Use <code>@classmethod</code> to define alternative constructors for classes</li>
+    <li>Use class method polymorphism to provide generic ways to build and connect many concrete subclasses</li>
+</div>
+
+```python
+
+```
