@@ -432,7 +432,7 @@ class GenericWorker:
 
     @classmethod
     def create_workers(
-        cls, input_class, config: Dict[str, PathLike]
+        cls, input_class: GenericInputData, config: Dict[str, PathLike]
     ) -> List["GenericWorker"]:
         workers = []
         for input_data in input_class.generate_inputs(config):
@@ -462,6 +462,168 @@ def mapreduce(
   <b>Tip:</b>
     <li>Use <code>@classmethod</code> to define alternative constructors for classes</li>
     <li>Use class method polymorphism to provide generic ways to build and connect many concrete subclasses</li>
+</div>
+
+
+## Initialize parent classes with `super`
+
+
+Simple way to initialize parent class from a child is:
+
+```python
+class MyBaseClass:
+    def __init__(self, value: int) -> None:
+        self.value = value
+
+
+class MyChildClass(MyBaseClass):
+    def __init__(self) -> None:
+        MyBaseClass.__init__(self, 5)
+
+
+```
+
+Mulitiple inheritance can lead to unpredictable behavior
+
+```python
+class TimesTwo:
+    def __init__(self) -> None:
+        self.value *= 2
+
+
+class PlusFive:
+    def __init__(self) -> None:
+        self.value += 5
+
+
+class OneWay(MyBaseClass, TimesTwo, PlusFive):
+    def __init__(self, value: int) -> None:
+        MyBaseClass.__init__(self, value)
+        TimesTwo.__init__(self)
+        PlusFive.__init__(self)
+
+
+foo = OneWay(5)
+print(f"First ordering value is (5 * 2) + 5 = {foo.value=}")
+
+
+class AnotherWay(MyBaseClass, PlusFive, TimesTwo):
+    """Multiple inheritance example.
+
+    Even though there is a different order of suprerclasses in the
+    definition, the __init__ order is the same.
+    """
+
+    def __init__(self, value: int) -> None:
+        MyBaseClass.__init__(self, value)
+        TimesTwo.__init__(self)
+        PlusFive.__init__(self)
+
+
+bar = AnotherWay(5)
+print(f"Second ordering value is {bar.value=}")
+
+
+class TimesSeven(MyBaseClass):
+    def __init__(self, value: int) -> None:
+        MyBaseClass.__init__(self, value)
+        self.value *= 7
+
+
+class PlusNine(MyBaseClass):
+    def __init__(self, value: int) -> None:
+        MyBaseClass.__init__(self, value)
+        self.value += 9
+
+
+class ThisWay(TimesSeven, PlusNine):
+    """Diamond inheritance example.
+
+    Both inherited classes have the same superclass, so the common
+    superclass's __init__ is run multiple times -- resetting the value.
+    """
+
+    def __init__(self, value: int) -> None:
+        TimesSeven.__init__(self, value)
+        PlusNine.__init__(self, value)
+
+
+foo = ThisWay(5)
+print(f"Should be (5 * 7) + 9 = 44, but is {foo.value=}")
+```
+
+Use `super` instead.
+
+```python
+class TimesSevenCorrect(MyBaseClass):
+    def __init__(self, value: int) -> None:
+        super().__init__(value)
+        self.value *= 7
+
+
+class PlusNineCorrect(MyBaseClass):
+    def __init__(self, value: int) -> None:
+        super().__init__(value)
+        self.value += 9
+
+
+class GoodWay(TimesSevenCorrect, PlusNineCorrect):
+    def __init__(self, value: int) -> None:
+        super().__init__(value)
+
+
+foo = GoodWay(5)
+print(f"Should be 7 * (5 + 9) = 98 and is {foo.value=}")
+```
+
+Order of operation here matches MRO ordering:
+
+```python
+[cls for cls in GoodWay.mro()]
+```
+
+`super` can be called with two parameters:
+
+1. Type of class whose MRO you're trying to access,
+2. Instance on which to access that view
+
+You whould only do this when you need to access specific functionality of a superclass's implimentation from a child class.
+
+```python
+class ExplicitTrisect(MyBaseClass):
+    def __init__(self, value: int) -> None:
+        super(ExplicitTrisect, self).__init__(value)
+        self.value /= 3
+```
+
+These parameters are not required for object instance initialization.
+
+```python
+class AutomaticTrisect(MyBaseClass):
+    def __init__(self, value):
+        """Equivalent to ExplicitTrisect."""
+        super(__class__, self).__init__(value)
+        self.value /= 3
+
+
+class ImplicitTrisect(MyBaseClass):
+    """Equivalent to AutomaticTrisect."""
+
+    def __init__(self, value):
+        super().__init__(value)
+        self.value /= 3
+
+
+all(
+    trisect(9).value == 3
+    for trisect in (ExplicitTrisect, AutomaticTrisect, ImplicitTrisect)
+)
+```
+
+<div class="alert alert-block alert-info">
+  <b>Tip:</b>
+    <li>Python's MORO solves the problem of superclass initialization order and diamond inheritance</li>
+    <li>Use <code>super</code> built-int function with zero arguments to initialize parent classes</li>
 </div>
 
 ```python

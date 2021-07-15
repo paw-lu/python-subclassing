@@ -193,7 +193,3 @@ class Mailbox(EmailAddr):
 class Forwarder(EmailAddr):
     targets: list[str]
 ```
-
-```python
-
-```
