@@ -626,6 +626,185 @@ all(
     <li>Use <code>super</code> built-int function with zero arguments to initialize parent classes</li>
 </div>
 
-```python
 
+## Consider composing functionality with Mix-in classes
+
+
+Better to avoid multiple inheritance.
+Consider _mix-ins_ if you want some of the convenience of multiple inheritance without the headaches.
+A _mix-in_ is a class that defines a subset of additional methods for its child classes.
+They have no instance attributes or require an `__init__`.
+
+```python
+from typing import Any
+from typing import Dict
+from typing import Optional
+
+
+
+class ToDictMixin:
+    def to_dict(self):
+        return self._traverse_dict(self.__dict__)
+
+    def _traverse_dict(self, instance_dict: Dict[str, Any]):
+        output = {}
+        for key, value in instance_dict.items():
+            output[key] = self._traverse(key, value)
+        return output
+
+    def _traverse(self, key: str, value: Any):
+        if isinstance(value, ToDictMixin):
+            return value.to_dict()
+        elif isinstance(value, dict):
+            return self._traverse_dict(value)
+        elif isinstance(value, list):
+            return [self._traverse(key, i) for i in value]
+        elif hasattr(value, "__dict__"):
+            return self._traverse_dict(value.__dict__)
+        else:
+            return value
+
+
+class BinaryTree(ToDictMixin):
+    def __init__(
+        self,
+        value: int,
+        left: Optional["BinaryTree"] = None,
+        right: Optional["BinaryTree"] = None,
+    ) -> None:
+        self.value = value
+        self.left = left
+        self.right = right
+
+
+tree = BinaryTree(
+    10,
+    left=BinaryTree(7, right=BinaryTree(9)),
+    right=BinaryTree(13, left=BinaryTree(11)),
+)
+tree.to_dict()
 ```
+
+Can also make their generic functions pluggable so behaviors can be overrriden when needed.
+
+```python
+class BinaryTreeWithParent(BinaryTree):
+    """
+    Since this refers to a parent, ToDictMixin.to_dict would infinitley
+    loop.
+    """
+
+    def __init__(
+        self,
+        value: int,
+        left: Optional["BinaryTree"] = None,
+        right: Optional["BinaryTree"] = None,
+        parent: Optional["BinaryTree"] = None,
+    ):
+        super().__init__(value, left=left, right=right)
+        self.parent = parent
+
+    def _traverse(self, key, value):
+        """
+        Override the _traverse method to only process values that
+        matter.
+        """
+        if isinstance(value, BinaryTreeWithParent) and key == "parent":
+            return value.value  # Prevent cycles
+        else:
+            return super()._traverse(key, value)
+
+
+root = BinaryTreeWithParent(10)
+root.left = BinaryTreeWithParent(7, parent=root)
+root.left.right = BinaryTreeWithParent(9, parent=root.left)
+root.to_dict()
+```
+
+```python
+class NamedSubTree(ToDictMixin):
+    """
+    Also enabled any class that has an attribute of type
+    BinaryTreeWithParent to automatically work with ToDictMixin.
+    """
+
+    def __init__(self, name: str, tree_with_parent: BinaryTreeWithParent) -> None:
+        self.name = name
+        self.tree_with_parent = tree_with_parent
+
+
+my_tree = NamedSubTree("foobar", root.left.right)
+my_tree.to_dict()
+```
+
+Mix-ins can be compsed together.
+
+```python
+import json
+import typing
+from typing import List
+
+T = typing.TypeVar("T")
+
+
+class JsonMixin:
+    @classmethod
+    def from_json(cls: T, data: str) -> T:
+        kwargs = json.loads(data)
+        return cls(**kwargs)
+
+    def to_json(self) -> str:
+        return json.dumps(self.to_dict())
+
+
+class DatacenterRack(ToDictMixin, JsonMixin):
+    def __init__(
+        self,
+        switch: Optional[Dict[str, int]] = None,
+        machines: List[Dict[str, float]] = None,
+    ) -> None:
+        self.switch = Switch(**switch)
+        self.machines = [Machine(**kwargs) for kwargs in machines]
+
+
+class Switch(ToDictMixin, JsonMixin):
+    def __init__(
+        self, ports: Optional[int] = None, speed: Optional[float] = None
+    ) -> None:
+        self.ports = ports
+        self.speed = speed
+
+
+class Machine(ToDictMixin, JsonMixin):
+    def __init__(
+        self,
+        cores: Optional[int] = None,
+        ram: Optional[float] = None,
+        disk: Optional[float] = None,
+    ) -> None:
+        self.cores = cores
+        self.ram = ram
+        self.disk = disk
+
+
+# Example 11
+serialized = """{
+    "switch": {"ports": 5, "speed": 1e9},
+    "machines": [
+        {"cores": 8, "ram": 32e9, "disk": 5e12},
+        {"cores": 4, "ram": 16e9, "disk": 1e12},
+        {"cores": 2, "ram": 4e9, "disk": 500e9}
+    ]
+}"""
+
+deserialized = DatacenterRack.from_json(serialized)
+deserialized.to_json()
+```
+
+<div class="alert alert-block alert-info">
+  <b>Tip:</b>
+    <li>Avoid using multiple inheritance with instance attributes and <code>__init__</code> if mix-in classes can achieve the same outcome</li>
+    <li>Use pluggable behaviors at the instance level to provide per-class customization</li>
+        <li>Mix-ins can include instance methods or class methods</li>
+            <li>Compose mix-ins to create complex functionality from simple behaviors</li>
+</div>
