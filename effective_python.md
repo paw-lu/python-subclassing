@@ -900,5 +900,59 @@ print(a.get(), a._value)
 ## Inherit from `collections.abc` for custom container types
 
 ```python
+from collections import abc
 
+class BadType(abc.Sequence):
+    pass
+foo = BadType()
 ```
+
+```python
+class BinaryNode:
+    def __init__(self, value, left=None, right=None) -> None:
+        self.value = value
+        self.left = left
+        self.right = right
+
+
+class IndexableNode(BinaryNode):
+    def _traverse(self):
+        if self.left is not None:
+            yield from self.left._traverse()
+        yield self
+        if self.right is not None:
+            yield from self.right._traverse()
+
+    def __getitem__(self, index):
+        for i, item in enumerate(self._traverse()):
+            if i == index:
+                return item.value
+        raise IndexError(f"Index {index} is out of range")
+
+
+class SequenceNode(IndexableNode):
+    def __len__(self) -> None:
+        for count, _ in enumerate(self._traverse(), 1):
+            pass
+        return count
+
+
+class BetterNode(SequenceNode, abc.Sequence):
+    pass
+
+
+tree = BetterNode(
+    10,
+    left=BetterNode(5, left=BetterNode(2), right=BetterNode(6, right=BetterNode(7))),
+    right=BetterNode(15, left=BetterNode(11)),
+)
+
+print(tree.index(7))
+print(tree.count(10))
+```
+
+<div class="alert alert-block alert-info">
+  <b>Tips:</b>
+    <li>Inherit directly from Python's container types `list` `dict` for simple cases</li>
+   <li>Have your custom container types inherit from the interfaces defined in <code>collections.abc</code></li>
+</div>
