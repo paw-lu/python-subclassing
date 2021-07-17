@@ -808,3 +808,97 @@ deserialized.to_json()
         <li>Mix-ins can include instance methods or class methods</li>
             <li>Compose mix-ins to create complex functionality from simple behaviors</li>
 </div>
+
+
+## Prefer public attributes over private ones
+
+```python
+class MyObject:
+    def __init__(self) -> None:
+        self.public_field = 5
+        self.__private_field = 10
+    
+    def get_private_field(self) -> int:
+        return self.__private_field
+
+foo = MyObject()
+foo.__private_field
+```
+
+Class methods can access private attibutes
+
+```python
+class MyOtherObject:
+    def __init__(self,) -> None:
+        self.__private_field = 71
+
+    @classmethod
+    def get_private_field_of_instance(cls, instance: "MyOtherObject") -> int:
+        return instance.__private_field
+
+
+
+bar = MyOtherObject()
+MyOtherObject.get_private_field_of_instance(bar)
+```
+
+```python
+class MyParentObject:
+    def __init__(self):
+        self.__private_field = 71
+
+class MyChildObject(MyParentObject):
+    def get_private_field(self):
+        """Can't directly access."""
+        return self.__private_field
+
+```
+
+```python
+baz = MyChildObject()
+baz.get_private_field()
+```
+
+```python
+baz._MyParentObject__private_field
+```
+
+```python
+baz.__dict__
+```
+
+Don't use private attributes for internal APIs.
+Makes subclassing hard.
+Use protencted fields instead (beggining with single underscore).
+Only use it when worried about naming conflics with subclasses.
+
+```python
+class ApiClass:
+    def __init__(self) -> None:
+        self.__value = 5
+
+    def get(self) -> int:
+        return self.__value
+
+
+class Child(ApiClass):
+    def __init__(self) -> None:
+        super().__init__()
+        self._value = "hello"
+
+a = Child()
+print(a.get(), a._value)
+```
+
+<div class="alert alert-block alert-info">
+  <b>Tips:</b>
+    <li>Private attributes are not rigorously enforced</li>
+   <li>Only consider using private attributes to avoid naming conflics with subclasses that are beyond your control</li>
+</div>
+
+
+## Inherit from `collections.abc` for custom container types
+
+```python
+
+```
